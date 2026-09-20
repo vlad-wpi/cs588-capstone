@@ -1,5 +1,7 @@
 # Connection Confidence
 
+**Live app: [connection-confidence.streamlit.app](https://connection-confidence.streamlit.app/)**
+
 CS588 capstone. Estimates the probability of making an airline connection, using historical
 BTS on-time performance data. A calibrated gradient-boosted classifier is trained offline; the
 deployed app just loads it and a couple of small lookup tables.
@@ -14,6 +16,10 @@ lookup tables, `model.pkl`, and `model_categories.json` are committed, since tho
 deployed app needs.
 
 ## Setup
+
+Requires **Python 3.11** — the pinned dependencies in `requirements.txt` don't install cleanly
+on newer versions. Streamlit Cloud defaults to 3.14, so its Python version setting needs to be
+pinned to 3.11 explicitly for deployment.
 
 ```bash
 pip install -r requirements.txt
