@@ -1,0 +1,13 @@
+raw_data/
+cleaned_data/
+data/*
+!data/lookups/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+
+.DS_Store

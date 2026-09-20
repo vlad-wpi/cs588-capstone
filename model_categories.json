@@ -1,0 +1,39 @@
+{
+  "airport": [
+    "ATL",
+    "CLT",
+    "DEN",
+    "DFW",
+    "ORD"
+  ],
+  "carrier_in": [
+    "AA",
+    "AS",
+    "B6",
+    "DL",
+    "F9",
+    "G4",
+    "MQ",
+    "NK",
+    "OH",
+    "OO",
+    "UA",
+    "WN",
+    "YX"
+  ],
+  "carrier_out": [
+    "AA",
+    "AS",
+    "B6",
+    "DL",
+    "F9",
+    "G4",
+    "MQ",
+    "NK",
+    "OH",
+    "OO",
+    "UA",
+    "WN",
+    "YX"
+  ]
+}
