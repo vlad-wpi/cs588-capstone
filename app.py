@@ -139,11 +139,11 @@ class Frontend:
         st.markdown(f"# {pct:.0f}%")
 
         if pct >= 80:
-            st.success("Good chance of making it.")
+            st.success("Comfortable. You should make it.")
         elif pct >= 55:
-            st.warning("Coin-flip territory -- could go either way.")
+            st.warning("Tight. You may not make it.")
         else:
-            st.error("Likely to miss this connection.")
+            st.error("Risky. You're likely to miss it.")
 
         if not r.recovery:
             st.write("No recovery data for this airport/month/time-of-day combination.")
