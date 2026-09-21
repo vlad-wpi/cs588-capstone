@@ -130,9 +130,10 @@ of values once `lookups.py`'s recovery/comparison tables exist to inform a per-a
 ## Lookups schema
 
 `lookups.py` reads the pairs files (plus, for recovery, the full cleaned flights — not just the
-capped candidate departures pairs.py kept) and writes two small tables. Both are keyed by
-`airport` and `month`, small enough to commit, and are exactly what the deployed app reads
-alongside `model.pkl` — see app.py below.
+capped candidate departures pairs.py kept) and writes four small tables: recovery, comparison,
+origin_distances, and coverage. Each is keyed by `airport`, small enough to commit, and is
+exactly what the deployed app reads alongside `model.pkl`. `carriers.csv` and `airports.csv`
+below are static name lookups, not built by `lookups.py`.
 
 **`data/lookups/recovery.parquet`** — one row per (airport, month, arrival time block), built
 from pairs labeled `missed`:
@@ -212,6 +213,24 @@ app.py's "flying in from" input: `distance_in` isn't a question a traveler can a
 but the airport they're flying from determines it. A given pair's distance is occasionally
 reported as two values a mile apart across the year (rounding, not a data error) — the mode is
 used rather than an arbitrary pick.
+
+**`data/lookups/coverage.parquet`** — `airport,carrier_in,carrier_out,n_pairs`: training pairs
+behind each (connecting airport, arriving carrier, departing carrier) combination (609 rows).
+A combination with no pairs at all is absent rather than a zero row. Backs app.py's not-covered
+rule (FR-11):
+
+- The arriving and departing carrier dropdowns list only carriers that appear at the selected
+  airport in this table. Because every airport's carriers form a complete grid here (each
+  arriving carrier has at least one pair with each departing carrier), this alone removes
+  every zero-pair combination.
+- Of the combinations that remain, one with fewer than **100** pairs (`MIN_COVERAGE_PAIRS`) is
+  reported as not covered by the data; the app shows that message and skips the probability,
+  recovery sentence, and chart rather than extrapolating from almost no data. 99 pairs is not
+  covered, 100 is.
+
+Today 42 of the 609 combinations are under the threshold. Per airport (combinations with
+fewer than 100 pairs / with any pairs): ATL 4 / 144, CLT 0 / 100, DEN 17 / 100, DFW 20 / 121,
+ORD 1 / 144.
 
 ## Model artifacts
 

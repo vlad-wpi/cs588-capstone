@@ -23,6 +23,13 @@ ORIGIN_NAMES_PATH = "data/lookups/airports.csv"
 ORIGIN_DISTANCES_PATH = "data/lookups/origin_distances.parquet"
 RECOVERY_PATH = "data/lookups/recovery.parquet"
 COMPARISON_PATH = "data/lookups/comparison.parquet"
+COVERAGE_PATH = "data/lookups/coverage.parquet"
+
+# FR-11: a carrier combination with fewer training pairs than this at the chosen
+# airport isn't covered by the data, so the app says so instead of predicting.
+MIN_COVERAGE_PAIRS = 100
+
+FOOTER = "Results are historical estimates, not guarantees -- based on 2025 BTS on-time data."
 
 MONTH_NAMES = [
     "January", "February", "March", "April", "May", "June",
@@ -101,12 +108,18 @@ def load_lookups() -> tuple[pd.DataFrame, pd.DataFrame]:
     return recovery, comparison
 
 
+@st.cache_data
+def load_coverage() -> pd.DataFrame:
+    return pd.read_parquet(COVERAGE_PATH)
+
+
 model = load_model()
 categories = load_categories()
 carrier_names = load_carrier_names()
 origin_names = load_origin_names()
 origin_distances = load_origin_distances()
 recovery, comparison = load_lookups()
+coverage = load_coverage()
 
 st.title("Connection Confidence")
 st.caption("Estimated probability of making a connecting flight, from 2025 BTS on-time data.")
@@ -128,17 +141,38 @@ origin = st.selectbox(
 )
 distance_in = int(origins_here.loc[origins_here["origin"] == origin, "distance_in"].iloc[0])
 
+coverage_here = coverage.loc[coverage["airport"] == airport]
 carrier_in = st.selectbox(
-    "Arriving carrier", categories["carrier_in"], format_func=lambda c: code_label(c, carrier_names)
+    "Arriving carrier",
+    sorted(coverage_here["carrier_in"].unique()),
+    format_func=lambda c: code_label(c, carrier_names),
 )
 carrier_out = st.selectbox(
-    "Departing carrier", categories["carrier_out"], format_func=lambda c: code_label(c, carrier_names)
+    "Departing carrier",
+    sorted(coverage_here["carrier_out"].unique()),
+    format_func=lambda c: code_label(c, carrier_names),
 )
 month_idx = st.selectbox("Month", options=list(range(12)), format_func=lambda i: MONTH_NAMES[i])
 month = month_idx + 1
 
 layover = st.slider("Layover (minutes)", min_value=30, max_value=240, value=60, step=5)
 arr_hour = st.slider("Arrival hour", min_value=0, max_value=23, value=12)
+
+# --- coverage (FR-11) ---------------------------------------------------------
+
+pair_count = int(
+    coverage_here.loc[
+        (coverage_here["carrier_in"] == carrier_in) & (coverage_here["carrier_out"] == carrier_out), "n_pairs"
+    ].sum()
+)
+if pair_count < MIN_COVERAGE_PAIRS:
+    st.info(
+        f"This combination isn't covered by the data: {code_label(carrier_in, carrier_names)} arriving and "
+        f"{code_label(carrier_out, carrier_names)} departing at {code_label(airport, AIRPORT_NAMES)} has "
+        f"{pair_count} training pairs (fewer than {MIN_COVERAGE_PAIRS}), too few for a reliable estimate."
+    )
+    st.caption(FOOTER)
+    st.stop()
 
 # --- prediction ---------------------------------------------------------------
 
@@ -222,4 +256,4 @@ chart = (
 )
 st.altair_chart(chart, use_container_width=True)
 
-st.caption("Results are historical estimates, not guarantees -- based on 2025 BTS on-time data.")
+st.caption(FOOTER)

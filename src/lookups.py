@@ -1,7 +1,8 @@
-"""Labeled pairs + cleaned flights -> recovery and comparison lookup tables.
+"""Labeled pairs + cleaned flights -> the small lookup tables the deployed app reads.
 
-Both tables are small (airport x month x a handful of buckets) and are the only
-things, besides model.pkl, that the deployed app reads -- see schema.md.
+recovery, comparison, origin_distances, and coverage are all small (airport x month
+x a handful of buckets, or airport x carrier pair) and are the only things, besides
+model.pkl, that the app reads -- see schema.md.
 """
 
 from __future__ import annotations
@@ -143,6 +144,38 @@ def build_origin_distances(cleaned: pd.DataFrame, airports: list[str] = AIRPORTS
     return pd.DataFrame(rows)
 
 
+def count_carrier_pairs(pairs: pd.DataFrame) -> pd.DataFrame:
+    """Pair count per (airport, carrier_in, carrier_out). A combination with no
+    pairs at all is simply absent from the result, not a zero row."""
+    return (
+        pairs.groupby(["airport", "carrier_in", "carrier_out"])
+        .size()
+        .rename("n_pairs")
+        .reset_index()
+    )
+
+
+def build_coverage(paths: list[Path] | None = None) -> pd.DataFrame:
+    """Training pairs behind each (airport, carrier_in, carrier_out) -- app.py
+    refuses to show a result for a combination with too few (FR-11).
+
+    Reads one pairs file at a time, three columns each, so the full ~27.7M-row
+    set never has to sit in memory (see the OOM notes in CLAUDE.md).
+    """
+    paths = paths if paths is not None else sorted(PAIRS_DIR.glob("pairs_*.parquet"))
+    if not paths:
+        raise SystemExit(f"no pairs files found matching {PAIRS_DIR / 'pairs_*.parquet'}")
+
+    counts = pd.concat(
+        (
+            count_carrier_pairs(pd.read_parquet(path, columns=["airport", "carrier_in", "carrier_out"]))
+            for path in paths
+        ),
+        ignore_index=True,
+    )
+    return counts.groupby(["airport", "carrier_in", "carrier_out"], as_index=False)["n_pairs"].sum()
+
+
 def build_comparison(pairs: pd.DataFrame) -> pd.DataFrame:
     """Observed success rate by airport x month x 15-minute layover bucket."""
     labeled = pairs.copy()
@@ -182,6 +215,11 @@ def main() -> None:
     origin_distances_path = LOOKUPS_DIR / "origin_distances.parquet"
     origin_distances.to_parquet(origin_distances_path, index=False)
     print(f"\norigin_distances: {len(origin_distances)} rows, wrote {origin_distances_path}")
+
+    coverage = build_coverage()
+    coverage_path = LOOKUPS_DIR / "coverage.parquet"
+    coverage.to_parquet(coverage_path, index=False)
+    print(f"\ncoverage: {len(coverage)} rows, wrote {coverage_path}")
 
 
 if __name__ == "__main__":
