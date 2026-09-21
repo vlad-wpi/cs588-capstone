@@ -36,11 +36,14 @@ Loads the committed `model.pkl` and `data/lookups/*` — no raw data or training
 ## Tests
 
 ```bash
+pip install pytest==8.3.3   # test-only, so not in requirements.txt
 pytest
 ```
 
-Covers `cleaner.py` and `pairs.py` against small hand-built DataFrames, plus a smoke test that
-loads `model.pkl` and checks a prediction lands in `[0, 1]`.
+Covers the cleaner, the pair builder, the coverage counts, and the app's `Backend` against
+small hand-built DataFrames, plus smoke tests that load `model.pkl` and the committed lookups
+and check a prediction lands in `[0, 1]`. The same suite runs in CI (GitHub Actions, Python
+3.11) on every push and pull request.
 
 ## Pipeline
 

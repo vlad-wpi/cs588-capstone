@@ -1,0 +1,24 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.11 to match the deployment: the pinned requirements need it, and a
+      # model.pkl that loads here is the same check that protects the live app.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # pytest is a test-time tool, not something the deployed app needs.
+      - run: pip install -r requirements.txt pytest==8.3.3
+
+      - run: pytest

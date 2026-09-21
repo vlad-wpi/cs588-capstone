@@ -94,7 +94,10 @@ schema.md         the interface between every stage above
 - `data/` is gitignored except `data/lookups/`. `model.pkl` and `model_categories.json` are
   committed at the repo root.
 - Pin exact versions in `requirements.txt`. A version drift between training and deployment
-  breaks the pickle load — this is also what `test_model_smoke.py` is a backstop for.
+  breaks the pickle load — this is also what `test_model_smoke.py` is a backstop for. CI runs on
+  Python 3.11 (the deployment's version) rather than this machine's 3.8, so a pickle that only
+  loads on 3.8 fails there. `pytest.ini` puts the repo root on the import path; without it bare
+  `pytest` can't import `src` (only `python -m pytest` could).
 - Train/test splits are chronological, never random. One arriving flight produces many pairs,
   so a random split leaks the same inbound flight across both sides.
 - No hyperparameter tuning yet — `LGBMClassifier(objective="binary", random_state=0)`,
@@ -103,7 +106,7 @@ schema.md         the interface between every stage above
 ## Commands
 
 ```bash
-pytest                        # tests
+pytest                        # tests (also run by CI: .github/workflows/tests.yml, Python 3.11, every push/PR)
 ruff check .                  # lint (not yet installed in this environment)
 python -m src.cleaner         # data/raw_data/*.csv -> data/clean/*.parquet
 python -m src.pairs           # data/clean/*.parquet -> data/pairs/pairs_<airport>.parquet
