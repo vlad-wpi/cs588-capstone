@@ -54,8 +54,9 @@ raw CSVs -> src/cleaner.py -> clean parquet
          -> src/pairs.py   -> labeled connection pairs
          -> src/features.py -> model features
          -> src/train.py    -> model.pkl (+ dev evaluation: baselines, calibration, ablation)
-         -> src/lookups.py  -> recovery.parquet, comparison.parquet
+         -> src/lookups.py  -> recovery, comparison, origin_distances, coverage (parquet)
 ```
 
-`app.py` only reads the last row's outputs (`model.pkl`, `model_categories.json`,
-`data/lookups/*`) — it never touches raw data or trains anything.
+The app only reads the last two rows' outputs (`model.pkl`, `model_categories.json`,
+`data/lookups/*`) — it never touches raw data or trains anything. `src/predictor.py` (`Backend`)
+wraps the model and lookups; `app.py` (`Frontend`) is the Streamlit screen on top of it.

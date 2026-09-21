@@ -14,8 +14,11 @@ passengers, so connection outcomes do not exist in the source. We construct them
 arriving flight with departures leaving shortly after, then use the actual times to label the
 pair made or missed. Train a gradient boosted classifier on those labels.
 
-All expensive work happens offline. The deployed app (`app.py`) loads `model.pkl` plus the
-small lookup tables in `data/lookups/` and does nothing else — no training, no raw data.
+All expensive work happens offline. The deployed app loads `model.pkl` plus the small lookup
+tables in `data/lookups/` and does nothing else — no training, no raw data. It is split in two:
+`src/predictor.py`'s `Backend` (the model and lookups, one method per figure on screen, no
+Streamlit) and `app.py`'s `Frontend` (the widgets and rendering, no model or data of its own).
+That split is the class diagram in the RAD.
 
 ## Current state
 
@@ -27,17 +30,25 @@ airports (ORD, ATL, DFW, DEN, CLT) and all twelve months of 2025.
   `drop_report.csv` (per-month, per-reason drop counts). `data/pairs/` — `pairs.py`'s output,
   one `pairs_<airport>.parquet` per airport, ~27.7M pairs total across the five. None of this
   is committed (see `.gitignore` below).
-- `data/lookups/recovery.parquet` and `comparison.parquet` — `lookups.py`'s output (240 and 840
-  rows respectively). Committed — see schema.md's Lookups schema section.
+- `data/lookups/` — `lookups.py`'s output: `recovery` (240 rows), `comparison` (840),
+  `origin_distances` (838), and `coverage` (609, pair count per airport x carrier pair), plus the
+  static `carriers.csv` / `airports.csv` name tables. Committed — see schema.md's Lookups schema.
 - `model.pkl` and `model_categories.json` — `train.py --save-model`'s output: the calibrated
   classifier and its dropdown categories. Committed, at the repo root.
 - `schema.md` — the interface between every stage (lives at the repo root, not
   `docs/schema.md`). Kept in sync with the code that implements it — update both together.
-- `tests/` covers `cleaner.py` and `pairs.py` against small hand-built DataFrames, plus a smoke
-  test that loads `model.pkl` and checks a prediction lands in [0, 1] (catches a library/pickle
-  version mismatch in CI instead of on demo day).
+- `tests/` covers `cleaner.py`, `pairs.py`, the coverage counts in `lookups.py`, and the
+  `Backend` against small hand-built DataFrames (the `Backend` tests use a fake model, so they
+  need no Streamlit), plus smoke tests that load `model.pkl` and the committed lookups and check
+  a prediction lands in [0, 1] (catches a library/pickle version mismatch in CI instead of on
+  demo day).
 
-Two things worth knowing before touching this code:
+Three things worth knowing before touching this code:
+
+- **The app refuses to answer for thinly-covered carrier combinations (FR-11).** The carrier
+  dropdowns list only carriers that operate at the selected airport, and a combination with
+  fewer than 100 training pairs (`MIN_COVERAGE_PAIRS`, from `coverage.parquet`) gets a
+  not-covered message instead of a probability, recovery sentence, or chart.
 
 - **`pairs.py` matches by timestamp, not `flight_date`.** An earlier `flight_date`-grouped
   version silently produced zero candidate pairs for every red-eye arrival, since a
@@ -62,10 +73,11 @@ src/
   features.py     pairs -> model features (native categorical dtype, no one-hot)
   train.py        fit, evaluate (chronological split, baselines, calibration, ablation),
                    and save the deployed model.pkl (--save-model)
-  lookups.py      pairs + clean parquet -> recovery.parquet, comparison.parquet
+  lookups.py      pairs + clean parquet -> recovery, comparison, origin_distances, coverage
+  predictor.py    Backend: model.pkl + lookups -> predict / recovery / comparison / coverage
 tests/
-  test_cleaner.py, test_pairs.py, test_model_smoke.py
-app.py            Streamlit UI
+  test_cleaner.py, test_pairs.py, test_lookups.py, test_predictor.py, test_model_smoke.py
+app.py            Streamlit UI: the Frontend class over Backend
 data/             gitignored except data/lookups/ (see .gitignore)
 model.pkl, model_categories.json   committed, at the repo root
 schema.md         the interface between every stage above
@@ -95,7 +107,7 @@ pytest                        # tests
 ruff check .                  # lint (not yet installed in this environment)
 python -m src.cleaner         # data/raw_data/*.csv -> data/clean/*.parquet
 python -m src.pairs           # data/clean/*.parquet -> data/pairs/pairs_<airport>.parquet
-python -m src.lookups         # pairs + clean -> data/lookups/{recovery,comparison}.parquet
+python -m src.lookups         # pairs + clean -> data/lookups/{recovery,comparison,origin_distances,coverage}.parquet
 python -m src.train           # dev evaluation: chronological split, baselines, calibration, ablation
 python -m src.train --save-model   # the deployed model: all months/airports -> model.pkl
 streamlit run app.py          # local UI

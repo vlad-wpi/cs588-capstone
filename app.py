@@ -1,33 +1,20 @@
 """Streamlit UI: connection confidence estimator.
 
-Loads model.pkl plus the small lookup tables and does nothing else -- no
-training, no raw pairs/cleaned data. Crude layout on purpose.
+The screen is the Frontend class below: it collects the selections and renders what
+the Backend (src/predictor.py) returns. It holds no model and no data of its own --
+no training, no raw pairs/cleaned data. Crude layout on purpose.
 """
 
 from __future__ import annotations
 
-import json
+from dataclasses import dataclass
 
 import altair as alt
-import joblib
 import pandas as pd
 import streamlit as st
 
-from src.features import FEATURE_COLUMNS, TARGET_COLUMN, build_features
-from src.lookups import arr_block, layover_bucket
-
-MODEL_PATH = "model.pkl"
-CATEGORIES_PATH = "model_categories.json"
-CARRIERS_PATH = "data/lookups/carriers.csv"
-ORIGIN_NAMES_PATH = "data/lookups/airports.csv"
-ORIGIN_DISTANCES_PATH = "data/lookups/origin_distances.parquet"
-RECOVERY_PATH = "data/lookups/recovery.parquet"
-COMPARISON_PATH = "data/lookups/comparison.parquet"
-COVERAGE_PATH = "data/lookups/coverage.parquet"
-
-# FR-11: a carrier combination with fewer training pairs than this at the chosen
-# airport isn't covered by the data, so the app says so instead of predicting.
-MIN_COVERAGE_PAIRS = 100
+from src.lookups import layover_bucket
+from src.predictor import MIN_COVERAGE_PAIRS, Backend
 
 FOOTER = "Results are historical estimates, not guarantees -- based on 2025 BTS on-time data."
 
@@ -44,39 +31,6 @@ AIRPORT_NAMES = {
     "DFW": "Dallas/Fort Worth",
     "ORD": "Chicago O'Hare",
 }
-
-# Not exposed as a UI input, fixed to a neutral value: a sensitivity sweep found
-# it moves the prediction by under 2 points across all 7 days, in every scenario
-# tested -- a footnote, unlike distance_in (which is why that one got a real input).
-DEFAULT_DAY_OF_WEEK = 2  # Wednesday
-
-
-@st.cache_resource
-def load_model():
-    return joblib.load(MODEL_PATH)
-
-
-@st.cache_resource
-def load_categories() -> dict:
-    with open(CATEGORIES_PATH) as f:
-        return json.load(f)
-
-
-@st.cache_resource
-def load_carrier_names() -> dict:
-    carriers = pd.read_csv(CARRIERS_PATH)
-    return dict(zip(carriers["code"], carriers["name"]))
-
-
-@st.cache_resource
-def load_origin_names() -> dict:
-    airports = pd.read_csv(ORIGIN_NAMES_PATH)
-    return dict(zip(airports["code"], airports["name"]))
-
-
-@st.cache_data
-def load_origin_distances() -> pd.DataFrame:
-    return pd.read_parquet(ORIGIN_DISTANCES_PATH)
 
 
 def code_label(code: str, names: dict) -> str:
@@ -101,159 +55,169 @@ def search_codes(codes: list[str], names: dict, term: str) -> list[str]:
     )
 
 
-@st.cache_data
-def load_lookups() -> tuple[pd.DataFrame, pd.DataFrame]:
-    recovery = pd.read_parquet(RECOVERY_PATH)
-    comparison = pd.read_parquet(COMPARISON_PATH)
-    return recovery, comparison
+@dataclass
+class Result:
+    """What the screen shows for a covered combination."""
+
+    probability: float
+    recovery: dict
 
 
-@st.cache_data
-def load_coverage() -> pd.DataFrame:
-    return pd.read_parquet(COVERAGE_PATH)
+class Frontend:
+    """The single screen: holds the current selections and renders the result."""
 
+    airport: str
+    origin: str
+    carrier_in: str
+    carrier_out: str
+    month: int
+    layover_min: int
+    arrival_hour: int
 
-model = load_model()
-categories = load_categories()
-carrier_names = load_carrier_names()
-origin_names = load_origin_names()
-origin_distances = load_origin_distances()
-recovery, comparison = load_lookups()
-coverage = load_coverage()
+    def __init__(self, backend: Backend):
+        self.backend = backend
 
-st.title("Connection Confidence")
-st.caption("Estimated probability of making a connecting flight, from 2025 BTS on-time data.")
+    def get_inputs(self) -> dict:
+        """Render the input widgets and return the current selections."""
+        lookups = self.backend.lookups
 
-airport = st.selectbox(
-    "Airport", categories["airport"], format_func=lambda c: code_label(c, AIRPORT_NAMES)
-)
+        self.airport = st.selectbox(
+            "Airport", lookups.airports(), format_func=lambda c: code_label(c, AIRPORT_NAMES)
+        )
 
-origins_here = origin_distances.loc[origin_distances["airport"] == airport]
-origin_search = st.text_input("Search", "", placeholder="Type to filter")
-origin_options = search_codes(origins_here["origin"].tolist(), origin_names, origin_search)
+        origins = lookups.origins_at(self.airport)
+        origin_search = st.text_input("Search", "", placeholder="Type to filter")
+        origin_options = search_codes(origins, lookups.origin_names, origin_search)
 
-if not origin_options:
-    st.warning(f"No airports match '{origin_search}'. Showing all instead.")
-    origin_options = search_codes(origins_here["origin"].tolist(), origin_names, "")
+        if not origin_options:
+            st.warning(f"No airports match '{origin_search}'. Showing all instead.")
+            origin_options = search_codes(origins, lookups.origin_names, "")
 
-origin = st.selectbox(
-    "Flying in from", origin_options, format_func=lambda c: code_label(c, origin_names)
-)
-distance_in = int(origins_here.loc[origins_here["origin"] == origin, "distance_in"].iloc[0])
+        self.origin = st.selectbox(
+            "Flying in from", origin_options, format_func=lambda c: code_label(c, lookups.origin_names)
+        )
 
-coverage_here = coverage.loc[coverage["airport"] == airport]
-carrier_in = st.selectbox(
-    "Arriving carrier",
-    sorted(coverage_here["carrier_in"].unique()),
-    format_func=lambda c: code_label(c, carrier_names),
-)
-carrier_out = st.selectbox(
-    "Departing carrier",
-    sorted(coverage_here["carrier_out"].unique()),
-    format_func=lambda c: code_label(c, carrier_names),
-)
-month_idx = st.selectbox("Month", options=list(range(12)), format_func=lambda i: MONTH_NAMES[i])
-month = month_idx + 1
+        self.carrier_in = st.selectbox(
+            "Arriving carrier",
+            lookups.carriers_in_at(self.airport),
+            format_func=lambda c: code_label(c, lookups.carrier_names),
+        )
+        self.carrier_out = st.selectbox(
+            "Departing carrier",
+            lookups.carriers_out_at(self.airport),
+            format_func=lambda c: code_label(c, lookups.carrier_names),
+        )
+        month_idx = st.selectbox("Month", options=list(range(12)), format_func=lambda i: MONTH_NAMES[i])
+        self.month = month_idx + 1
 
-layover = st.slider("Layover (minutes)", min_value=30, max_value=240, value=60, step=5)
-arr_hour = st.slider("Arrival hour", min_value=0, max_value=23, value=12)
+        self.layover_min = st.slider("Layover (minutes)", min_value=30, max_value=240, value=60, step=5)
+        self.arrival_hour = st.slider("Arrival hour", min_value=0, max_value=23, value=12)
 
-# --- coverage (FR-11) ---------------------------------------------------------
-
-pair_count = int(
-    coverage_here.loc[
-        (coverage_here["carrier_in"] == carrier_in) & (coverage_here["carrier_out"] == carrier_out), "n_pairs"
-    ].sum()
-)
-if pair_count < MIN_COVERAGE_PAIRS:
-    st.info(
-        f"This combination isn't covered by the data: {code_label(carrier_in, carrier_names)} arriving and "
-        f"{code_label(carrier_out, carrier_names)} departing at {code_label(airport, AIRPORT_NAMES)} has "
-        f"{pair_count} training pairs (fewer than {MIN_COVERAGE_PAIRS}), too few for a reliable estimate."
-    )
-    st.caption(FOOTER)
-    st.stop()
-
-# --- prediction ---------------------------------------------------------------
-
-query = pd.DataFrame(
-    [
-        {
-            "airport": airport,
-            "carrier_in": carrier_in,
-            "carrier_out": carrier_out,
-            "slack_min": layover,
-            "arr_hour": arr_hour,
-            "day_of_week": DEFAULT_DAY_OF_WEEK,
-            "month": month,
-            "distance_in": distance_in,
-            TARGET_COLUMN: True,  # dummy; build_features needs the column, prediction ignores it
+        return {
+            "airport": self.airport,
+            "origin": self.origin,
+            "carrier_in": self.carrier_in,
+            "carrier_out": self.carrier_out,
+            "month": self.month,
+            "layover_min": self.layover_min,
+            "arrival_hour": self.arrival_hour,
         }
-    ]
-)
-features = build_features(query)
-prob = model.predict_proba(features[FEATURE_COLUMNS])[0, 1]
-pct = prob * 100
 
-st.markdown(f"# {pct:.0f}%")
+    def render_not_covered(self, pair_count: int) -> None:
+        """FR-11: say so instead of showing a result."""
+        names = self.backend.lookups.carrier_names
+        st.info(
+            f"This combination isn't covered by the data: {code_label(self.carrier_in, names)} arriving and "
+            f"{code_label(self.carrier_out, names)} departing at {code_label(self.airport, AIRPORT_NAMES)} has "
+            f"{pair_count} training pairs (fewer than {MIN_COVERAGE_PAIRS}), too few for a reliable estimate."
+        )
 
-if pct >= 80:
-    st.success("Good chance of making it.")
-elif pct >= 55:
-    st.warning("Coin-flip territory -- could go either way.")
-else:
-    st.error("Likely to miss this connection.")
+    def render_result(self, r: Result) -> None:
+        """The probability in large type, its plain-language band, and the recovery panel."""
+        pct = r.probability * 100
 
-# --- recovery sentence ---------------------------------------------------------
+        st.markdown(f"# {pct:.0f}%")
 
-block = arr_block(pd.Series([arr_hour])).iloc[0]
-recovery_row = recovery.loc[
-    (recovery["airport"] == airport) & (recovery["month"] == month) & (recovery["arr_block"] == block)
-]
+        if pct >= 80:
+            st.success("Good chance of making it.")
+        elif pct >= 55:
+            st.warning("Coin-flip territory -- could go either way.")
+        else:
+            st.error("Likely to miss this connection.")
 
-if len(recovery_row):
-    wait = recovery_row["median_wait_min"].iloc[0]
-    no_recovery = recovery_row["no_recovery_share"].iloc[0]
+        if not r.recovery:
+            st.write("No recovery data for this airport/month/time-of-day combination.")
+            return
 
-    sentence = (
-        f"In {no_recovery:.0%} of similar missed connections at {airport} in {MONTH_NAMES[month_idx]}, "
-        f"no later same-day flight was available."
-    )
-    if pd.notna(wait):
-        wait_text = f"{wait / 60:.1f} hours" if wait > 90 else f"{wait:.0f} minutes"
-        sentence += f" When one was, the typical wait was about {wait_text}."
-    st.write(sentence)
-else:
-    st.write("No recovery data for this airport/month/time-of-day combination.")
+        wait = r.recovery["median_wait_min"]
+        sentence = (
+            f"In {r.recovery['no_recovery_share']:.0%} of similar missed connections at {self.airport} "
+            f"in {MONTH_NAMES[self.month - 1]}, no later same-day flight was available."
+        )
+        if pd.notna(wait):
+            wait_text = f"{wait / 60:.1f} hours" if wait > 90 else f"{wait:.0f} minutes"
+            sentence += f" When one was, the typical wait was about {wait_text}."
+        st.write(sentence)
 
-# --- bar chart: success rate by airport at the selected layover ----------------
+    def render_chart(self, rows: list) -> None:
+        """Success rate by airport at the selected layover, selected airport highlighted."""
+        columns = ["airport", "month", "layover_bucket", "n", "success_rate"]
+        by_airport = pd.DataFrame(rows, columns=columns)
+        by_airport["label"] = by_airport["airport"].map(lambda c: code_label(c, AIRPORT_NAMES))
+        by_airport["selected"] = by_airport["airport"] == self.airport
 
-bucket = layover_bucket(pd.Series([layover])).iloc[0]
-by_airport = comparison.loc[(comparison["month"] == month) & (comparison["layover_bucket"] == bucket)].copy()
-by_airport["label"] = by_airport["airport"].map(lambda c: code_label(c, AIRPORT_NAMES))
-by_airport["selected"] = by_airport["airport"] == airport
+        bucket = layover_bucket(pd.Series([self.layover_min])).iloc[0]
+        st.subheader(f"Success rate by airport, {MONTH_NAMES[self.month - 1]}, {bucket} min layover")
 
-st.subheader(f"Success rate by airport, {MONTH_NAMES[month_idx]}, {bucket} min layover")
+        chart = (
+            alt.Chart(by_airport)
+            .mark_bar()
+            .encode(
+                x=alt.X("label:N", title="Airport", sort=None),
+                y=alt.Y(
+                    "success_rate:Q",
+                    title="Success rate",
+                    axis=alt.Axis(format="%", values=[i / 10 for i in range(11)]),
+                    scale=alt.Scale(domain=[0, 1]),
+                ),
+                color=alt.Color(
+                    "selected:N",
+                    legend=None,
+                    scale=alt.Scale(domain=[False, True], range=["#4c78a8", "#e45756"]),
+                ),
+                tooltip=["label:N", alt.Tooltip("success_rate:Q", format=".1%")],
+            )
+        )
+        st.altair_chart(chart, use_container_width=True)
 
-chart = (
-    alt.Chart(by_airport)
-    .mark_bar()
-    .encode(
-        x=alt.X("label:N", title="Airport", sort=None),
-        y=alt.Y(
-            "success_rate:Q",
-            title="Success rate",
-            axis=alt.Axis(format="%", values=[i / 10 for i in range(11)]),
-            scale=alt.Scale(domain=[0, 1]),
-        ),
-        color=alt.Color(
-            "selected:N",
-            legend=None,
-            scale=alt.Scale(domain=[False, True], range=["#4c78a8", "#e45756"]),
-        ),
-        tooltip=["label:N", alt.Tooltip("success_rate:Q", format=".1%")],
-    )
-)
-st.altair_chart(chart, use_container_width=True)
+    def run(self) -> None:
+        st.title("Connection Confidence")
+        st.caption("Estimated probability of making a connecting flight, from 2025 BTS on-time data.")
 
-st.caption(FOOTER)
+        inputs = self.get_inputs()
+
+        if self.backend.is_covered(self.airport, self.carrier_in, self.carrier_out):
+            self.render_result(
+                Result(
+                    probability=self.backend.predict(inputs),
+                    recovery=self.backend.recovery(self.airport, self.month, self.arrival_hour),
+                )
+            )
+            self.render_chart(self.backend.comparison(self.layover_min, self.month))
+        else:
+            self.render_not_covered(self.backend.pair_count(self.airport, self.carrier_in, self.carrier_out))
+
+        st.caption(FOOTER)
+
+
+@st.cache_resource
+def load_backend() -> Backend:
+    return Backend.load()
+
+
+def main() -> None:
+    Frontend(load_backend()).run()
+
+
+if __name__ == "__main__":
+    main()
