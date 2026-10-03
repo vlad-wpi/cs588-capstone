@@ -11,11 +11,12 @@ connection time (MCT). Also carries the outbound flight's destination and
 scheduled departure (dest_out, sched_dep_out), which lookups.py needs to find,
 for a missed pair, the next departure to the same place.
 
-Because arrivals and departures are matched by timestamp, an arrival near the end
-of one month can connect to a departure recorded in the next month's parquet file
-(a December 31 red-eye landing after midnight, connecting to a January 1
-departure). `load_with_boundary` handles this by additionally loading the
-following month's first calendar day as departure-only data.
+Because matching is by timestamp, an arrival near the end of one month pairs with the
+next month's earliest departures. The full-year run gets that for free: it pairs
+against the departures of all twelve months at once, so no month boundary inside 2025
+needs special handling. The one boundary it can't cross is the end of the data -- a
+December 31 arrival whose window reaches into January 2026 has no 2026 departures to
+pair with. That is a known, tiny gap, measured in schema.md.
 
 Writes `data/pairs/pairs_<airport>.parquet`.
 """
@@ -116,10 +117,10 @@ def build_pairs(
 ) -> pd.DataFrame:
     """Build labeled connection pairs for one airport.
 
-    `arrivals_source` and `departures_source` are separate so a caller can widen
-    the departures side past a month boundary without treating that extra data as
-    arrivals too (see `load_with_boundary`). Pass the same frame for both when
-    there's no boundary to worry about.
+    `arrivals_source` and `departures_source` are separate so a caller can pair a
+    subset of arrivals (say one month) against a wider set of departures without
+    that wider set also being treated as arrivals. The full-year run passes the same
+    frame for both.
     """
     arrivals = arrivals_source.loc[arrivals_source["dest"] == airport].reset_index(drop=True)
     departures = departures_source.loc[departures_source["origin"] == airport].reset_index(drop=True)
@@ -155,36 +156,7 @@ def load_cleaned(months: list[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 
-def _next_month_key(month_key: str) -> str:
-    year, month = (int(part) for part in month_key.split("_"))
-    month += 1
-    if month > 12:
-        month = 1
-        year += 1
-    return f"{year}_{month:02d}"
-
-
-def load_with_boundary(months: list[str]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Return (arrivals_source, departures_source) for `months`.
-
-    departures_source additionally includes the following month's first calendar
-    day, if that month's file exists, so a late arrival in the last day of
-    `months` can still match a departure recorded in the next month's parquet.
-    """
-    arrivals_source = load_cleaned(months)
-    departures_source = arrivals_source
-
-    next_month_path = CLEAN_DIR / f"flights_{_next_month_key(months[-1])}.parquet"
-    if next_month_path.exists():
-        next_month_df = pd.read_parquet(next_month_path)
-        first_day = next_month_df["flight_date"].min()
-        boundary = next_month_df.loc[next_month_df["flight_date"] == first_day]
-        departures_source = pd.concat([arrivals_source, boundary], ignore_index=True)
-
-    return arrivals_source, departures_source
-
-
-AIRPORTS = ["ORD", "ATL", "DFW", "DEN", "CLT"]
+AIRPORTS =["ORD", "ATL", "DFW", "DEN", "CLT"]
 ALL_MONTHS = [f"2025_{m:02d}" for m in range(1, 13)]
 
 SLACK_BUCKETS = [

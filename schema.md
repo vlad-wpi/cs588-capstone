@@ -101,11 +101,41 @@ that silently dropped every red-eye arrival, since a same-`flight_date` departur
 scheduled before a rolled-forward `sched_arr` and so never lands in the window. Timestamp
 matching fixes that.)
 
-Because matching is by timestamp, an inbound flight near the end of one month's file can match
-an outbound flight recorded in the next month's file (a December 31 red-eye landing after
-midnight, connecting to a January 1 departure). `PairBuilder` handles this by loading the
-following month's first calendar day alongside the target month whenever it's available, and
-using it only as candidate outbound flights, never as inbound flights of its own.
+Because matching is by timestamp, an inbound flight near the end of one month can match an
+outbound flight recorded in the next month's file. `PairBuilder` gets this for free: it pairs
+against the departures of all twelve months at once, so no month boundary inside 2025 needs
+special handling (checked at ORD: late-month arrivals do pair with departures in the next
+month, e.g. Nov 30 arrivals with the 17 departures scheduled between 00:02 and 04:00 on Dec 1; the other
+boundaries have few or none only because ORD schedules almost nothing between midnight and
+4 a.m.). The one boundary it can't cross is the end of the data, below.
+
+#### Known gap: the end of the data
+
+A December 31 arrival whose 30-240 minute window reaches past midnight would need January 1,
+2026 departures to pair with, and we only have 2025. Measured across the five airports,
+counting an arrival as affected when `sched_arr + 240 min` falls after 2026-01-01 00:00:
+
+| | ORD | ATL | DFW | DEN | CLT | Total |
+|---|---|---|---|---|---|---|
+| Affected arrivals | 81 | 100 | 41 | 52 | 33 | **307** |
+| ...window partly in 2026 (fewer candidates than they should have) | 55 | 72 | 24 | 36 | 18 | 205 |
+| ...window wholly in 2026 (no possible candidates) | 26 | 28 | 17 | 16 | 15 | 102 |
+| Pairs they have now | 592 | 1,330 | 44 | 513 | 67 | 2,546 |
+| Estimated pairs lost | 300 | 380 | 164 | 253 | 240 | **~1,337** |
+
+That is 0.02% of the 1,439,428 arrivals and about **0.005%** of the 27,742,956 pairs. The
+loss is an estimate, because the missing departures are unknown: it stands in January 1 2025's
+schedule for January 1 2026. The hard upper bound, if every affected arrival would have hit the
+20-departure cap, is 3,594 pairs (0.013%). The counting logic was checked first: it reproduces
+the pipeline's exact pair count at all five airports.
+
+This is the residue of the red-eye fix at the edge of the data, not a bug. Timestamp matching
+lets a late arrival pair with a departure across midnight wherever that departure exists in
+the data; at the very end of the year it doesn't. (The mirror image at the start of the year --
+late December 31, 2024 arrivals -- is simply not in the data; that is a missing sample, not
+truncated pairs for arrivals we have.) Closing the gap would need January 2026 data (BTS's
+2026-01 file), cleaned, with its first day's departures added as departure-only candidates when
+pairing December. At this size that isn't worth doing; the gap is documented instead.
 
 One inbound flight can have many candidate outbound flights within that window. An uncapped
 join is combinatorial — hundreds of millions of rows across all airports and months — so

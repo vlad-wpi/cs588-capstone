@@ -53,9 +53,10 @@ Three things worth knowing before touching this code:
 - **`pairs.py` matches by timestamp, not `flight_date`.** An earlier `flight_date`-grouped
   version silently produced zero candidate pairs for every red-eye arrival, since a
   same-`flight_date` departure is always scheduled before a rolled-forward `sched_arr`.
-  Matching directly on `sched_arr`/`sched_dep` fixes that, which is also why `pairs.py` loads
-  the following month's first calendar day as departure-only data (a Dec 31 red-eye can connect
-  to a Jan 1 departure).
+  Matching directly on `sched_arr`/`sched_dep` fixes that. `pairs.py` pairs against the whole
+  year's departures at once, so month boundaries inside 2025 are crossed with no special
+  handling. The one open edge is the end of the data: 307 Dec 31 arrivals reach into January
+  2026, which we don't have (~1,337 pairs, 0.005% — see schema.md's "Known gap").
 - **This machine has ~7.7GB of RAM, and LightGBM on the full 27.7M-row dataset is close to the
   ceiling.** `train.py`'s dev-evaluation path (`python -m src.train`, chronological split +
   ablation + reliability tables) and its final-model path (`python -m src.train --save-model`,
