@@ -1,0 +1,246 @@
+{
+  "provenance": {
+    "git_sha": "e0687ee321b9710b66d5220b952fa76966e1d90a",
+    "git_dirty": false,
+    "generated_at_utc": "2026-10-09T04:06:44.599845+00:00",
+    "model_under_evaluation": {
+      "is_deployed_model": false,
+      "deployed_model_path": "model.pkl",
+      "note": "This evaluation measures the dev model: fit on Jan-Oct (subsampled, stratified by airport), calibrated on a held-out 10% slice of Jan-Oct, and scored on the full Nov-Dec test set. It is NOT model.pkl. The deployed model (`python -m src.train --save-model`) is fit on all twelve months with no chronological holdout, so it has no held-out data left to score honestly -- these figures stand in for it."
+    },
+    "row_counts": {
+      "train": 4499998,
+      "calibration": 500001,
+      "test": 4506595
+    },
+    "parameters": {
+      "mct_min": 45,
+      "slack_window_min": {
+        "min": 30,
+        "max": 240
+      },
+      "candidate_cap_per_arrival": 20,
+      "pairs_sampling_seed": 0,
+      "train_subsample_seed": 0,
+      "subsample_target_rows": 5000000,
+      "train_months": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "test_months": [
+        11,
+        12
+      ]
+    },
+    "versions": {
+      "pinned": {
+        "lightgbm": "4.6.0",
+        "scikit-learn": "1.3.2",
+        "pandas": "2.0.3",
+        "numpy": "1.24.4"
+      },
+      "installed": {
+        "lightgbm": "4.6.0",
+        "scikit-learn": "1.3.2",
+        "pandas": "2.0.3",
+        "numpy": "1.24.4"
+      }
+    }
+  },
+  "model": {
+    "accuracy": 0.880409710657381,
+    "auc": 0.8125381429796494
+  },
+  "baselines": {
+    "always_predict_made": {
+      "accuracy": 0.8747251528038352
+    },
+    "slack_threshold": {
+      "threshold_min": 45,
+      "accuracy": 0.8697506654136882,
+      "auc": 0.7734434803365098
+    }
+  },
+  "reliability": {
+    "before_calibration": [
+      {
+        "decile": 0,
+        "n": 450662,
+        "predicted_rate": 0.5212059686861583,
+        "observed_rate": 0.5357363167961798
+      },
+      {
+        "decile": 1,
+        "n": 450658,
+        "predicted_rate": 0.7601703982487231,
+        "observed_rate": 0.7367249666043874
+      },
+      {
+        "decile": 2,
+        "n": 450662,
+        "predicted_rate": 0.8628688403847431,
+        "observed_rate": 0.8303007575522232
+      },
+      {
+        "decile": 3,
+        "n": 450661,
+        "predicted_rate": 0.91604137857985,
+        "observed_rate": 0.8832359578485824
+      },
+      {
+        "decile": 4,
+        "n": 450665,
+        "predicted_rate": 0.9445443424906551,
+        "observed_rate": 0.9188931911730442
+      },
+      {
+        "decile": 5,
+        "n": 450664,
+        "predicted_rate": 0.9613047151318376,
+        "observed_rate": 0.9432725933289546
+      },
+      {
+        "decile": 6,
+        "n": 450645,
+        "predicted_rate": 0.9723877398541,
+        "observed_rate": 0.9590431492638329
+      },
+      {
+        "decile": 7,
+        "n": 450659,
+        "predicted_rate": 0.9800834141566307,
+        "observed_rate": 0.9712421143259093
+      },
+      {
+        "decile": 8,
+        "n": 450659,
+        "predicted_rate": 0.9857760578547268,
+        "observed_rate": 0.9795787946096716
+      },
+      {
+        "decile": 9,
+        "n": 450660,
+        "predicted_rate": 0.9911568986349714,
+        "observed_rate": 0.9892269116407048
+      }
+    ],
+    "after_calibration": [
+      {
+        "decile": 0,
+        "n": 475145,
+        "predicted_rate": 0.5183000470357578,
+        "observed_rate": 0.5428385019309895
+      },
+      {
+        "decile": 1,
+        "n": 433001,
+        "predicted_rate": 0.7665963770539718,
+        "observed_rate": 0.7412638769887367
+      },
+      {
+        "decile": 2,
+        "n": 448003,
+        "predicted_rate": 0.8681897975498102,
+        "observed_rate": 0.8311484521309009
+      },
+      {
+        "decile": 3,
+        "n": 480722,
+        "predicted_rate": 0.9191402731446812,
+        "observed_rate": 0.8847525180873769
+      },
+      {
+        "decile": 4,
+        "n": 481414,
+        "predicted_rate": 0.9472010203935811,
+        "observed_rate": 0.9222374089660874
+      },
+      {
+        "decile": 5,
+        "n": 387748,
+        "predicted_rate": 0.9635122945584275,
+        "observed_rate": 0.9447037766796992
+      },
+      {
+        "decile": 6,
+        "n": 726701,
+        "predicted_rate": 0.9766663085569228,
+        "observed_rate": 0.9628678094567091
+      },
+      {
+        "decile": 7,
+        "n": 185586,
+        "predicted_rate": 0.9831998779020817,
+        "observed_rate": 0.9748849589947518
+      },
+      {
+        "decile": 8,
+        "n": 519239,
+        "predicted_rate": 0.9884230905928127,
+        "observed_rate": 0.9806043074576447
+      },
+      {
+        "decile": 9,
+        "n": 369036,
+        "predicted_rate": 0.995044992572105,
+        "observed_rate": 0.9900524610065142
+      }
+    ]
+  },
+  "feature_importance": [
+    {
+      "feature": "slack_min",
+      "gain": 2835236.5944423676,
+      "share": 0.68246873833461
+    },
+    {
+      "feature": "arr_hour",
+      "gain": 810293.2971792221,
+      "share": 0.1950453959612702
+    },
+    {
+      "feature": "month",
+      "gain": 153354.35770702362,
+      "share": 0.036913869984459356
+    },
+    {
+      "feature": "carrier_in",
+      "gain": 115499.731341362,
+      "share": 0.02780189705544802
+    },
+    {
+      "feature": "distance_in",
+      "gain": 92085.88514614105,
+      "share": 0.02216595891055545
+    },
+    {
+      "feature": "airport",
+      "gain": 65988.33675765991,
+      "share": 0.015884027816259538
+    },
+    {
+      "feature": "carrier_out",
+      "gain": 55593.63873767853,
+      "share": 0.013381923950581541
+    },
+    {
+      "feature": "day_of_week",
+      "gain": 26331.261072158813,
+      "share": 0.006338187986815906
+    }
+  ],
+  "ablation": {
+    "all features": 0.8125381429796494,
+    "without airport": 0.8104877329118235,
+    "without month": 0.812206488419106,
+    "without distance_in": 0.8097489956565116
+  }
+}
