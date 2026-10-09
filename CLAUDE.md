@@ -35,13 +35,21 @@ airports (ORD, ATL, DFW, DEN, CLT) and all twelve months of 2025.
   static `carriers.csv` / `airports.csv` name tables. Committed — see schema.md's Lookups schema.
 - `model.pkl` and `model_categories.json` — `train.py --save-model`'s output: the calibrated
   classifier and its dropdown categories. Committed, at the repo root.
+- `results/evaluation.json` and `evaluation.md` — `train.py`'s dev-evaluation output (no
+  `--save-model`): model vs. baselines, reliability before/after calibration, feature
+  importance, ablation, and a provenance block (git SHA — dirty check ignores `results/`
+  itself, see schema.md — timestamp, row counts, run parameters, pinned vs. installed library
+  versions, and an explicit note that this is the dev model, not `model.pkl`). Both files from
+  the same run, committed. Regenerate with
+  `python -m src.train` against the full dataset.
 - `schema.md` — the interface between every stage (lives at the repo root, not
   `docs/schema.md`). Kept in sync with the code that implements it — update both together.
 - `tests/` covers `cleaner.py`, `pairs.py`, the coverage counts in `lookups.py`, and the
   `Backend` against small hand-built DataFrames (the `Backend` tests use a fake model, so they
   need no Streamlit), plus smoke tests that load `model.pkl` and the committed lookups and check
   a prediction lands in [0, 1] (catches a library/pickle version mismatch in CI instead of on
-  demo day).
+  demo day), plus `test_evaluation_results.py`, which checks the committed `results/` record
+  against fixed floors rather than recomputing anything itself.
 
 Three things worth knowing before touching this code:
 
@@ -113,6 +121,7 @@ python -m src.cleaner         # data/raw_data/*.csv -> data/clean/*.parquet
 python -m src.pairs           # data/clean/*.parquet -> data/pairs/pairs_<airport>.parquet
 python -m src.lookups         # pairs + clean -> data/lookups/{recovery,comparison,origin_distances,coverage}.parquet
 python -m src.train           # dev evaluation: chronological split, baselines, calibration, ablation
+                               #   -> writes results/evaluation.json, results/evaluation.md
 python -m src.train --save-model   # the deployed model: all months/airports -> model.pkl
 streamlit run app.py          # local UI
 ```

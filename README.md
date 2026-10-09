@@ -43,7 +43,23 @@ pytest
 Covers the cleaner, the pair builder, the coverage counts, and the app's `Backend` against
 small hand-built DataFrames, plus smoke tests that load `model.pkl` and the committed lookups
 and check a prediction lands in `[0, 1]`. The same suite runs in CI (GitHub Actions, Python
-3.11) on every push and pull request.
+3.11) on every push and pull request. `tests/test_evaluation_results.py` is a regression check
+against the recorded evaluation below, not a recomputation — see that section.
+
+## Evaluation
+
+`results/evaluation.json` (machine-readable) and `results/evaluation.md` (human-readable) are
+the committed record of the dev-evaluation run: model accuracy and AUC against both baselines,
+the reliability table before and after calibration, feature importances, the ablation, and a
+provenance block (git commit, timestamp, row counts, the run's parameters, and the pinned
+library versions that produced it) so the numbers are traceable back to the code and data that
+made them. Both files come from the same run, so they can't disagree.
+
+Regenerate them by running `python -m src.train` (no `--save-model`) against the full dataset,
+then commit the updated files. `tests/test_evaluation_results.py` checks the committed record
+against fixed floors (e.g. model AUC at least 0.78) — it reads `results/evaluation.json` and
+does not retrain or recompute anything itself, so it can't catch a live regression between
+regenerations, only a worse record being committed.
 
 ## Pipeline
 

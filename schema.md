@@ -274,6 +274,46 @@ stratified holdout, and writes two files to the repo root (committed, unlike `da
   saw in training, i.e. app.py's dropdown options. Pulled from the training data's categorical
   dtype, not hand-maintained, so it can't drift from what the model knows.
 
+## Evaluation results
+
+`train.py`'s dev-evaluation run (`python -m src.train`, *without* `--save-model`) writes its
+results to two committed files, generated from the same run so they can't disagree:
+
+- `results/evaluation.json` — machine-readable. One object with keys `provenance`, `model`
+  (`accuracy`, `auc` on the chronological test set), `baselines` (`always_predict_made`,
+  `slack_threshold`), `reliability` (`before_calibration` / `after_calibration`, each a list of
+  per-decile `{decile, n, predicted_rate, observed_rate}`), `feature_importance` (gain-based,
+  sorted), and `ablation` (AUC per feature dropped).
+- `results/evaluation.md` — the same data, formatted as tables for a human.
+
+`provenance` is what makes the numbers traceable rather than just asserted:
+
+- `git_sha` / `git_dirty` — the record can't be fully trusted to a commit if generated against a
+  dirty tree. `git_dirty` deliberately ignores `results/` itself (`git status --porcelain --
+  . ":(exclude)results/"`): writing `evaluation.json`/`.md` always leaves `results/` different
+  from `HEAD` (new on the first run, modified on every run after), so including it would make
+  `git_dirty` trivially true every single time and tell a reader nothing. What matters is
+  whether the *code* that produced these numbers was committed.
+- `model_under_evaluation` — states explicitly that this is **not** `model.pkl`. It's the dev
+  model: fit on Jan-Oct (subsampled, stratified by airport), calibrated on a held-out 10% slice
+  of Jan-Oct, scored on the full Nov-Dec test set. The deployed model is fit on all twelve
+  months with no chronological holdout (`--save-model`), so it has no held-out data left to
+  score honestly — these figures stand in for it, and the block says so rather than leaving a
+  reader to assume the dev-run numbers describe the deployed model.
+- `generated_at_utc`, `row_counts` (train/calibration/test), `parameters` (MCT, slack window,
+  candidate cap, the pairs-sampling and train-subsample seeds, subsample target, train/test
+  months).
+- `versions.pinned` (lightgbm, scikit-learn, pandas, numpy, read from `requirements.txt`) and
+  `versions.installed` (the same four, from `importlib.metadata` — what actually ran). They
+  should always agree; `tests/test_evaluation_results.py` asserts they do, so a drift between
+  the lockfile and the environment that generated the record fails loudly instead of being
+  silently recorded as two numbers nobody compares.
+
+`tests/test_evaluation_results.py` checks this committed record against fixed floors (e.g.
+model AUC at least 0.78) and the pinned/installed version match above — it reads the file and
+does not retrain or recompute anything, so it guards against a worse model (or a version drift)
+being committed, not a live regression between regenerations.
+
 ## File layout
 
 Raw files are the archive and are never edited. Cleaned output is Parquet, partitioned by
