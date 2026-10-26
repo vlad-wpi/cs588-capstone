@@ -17,7 +17,16 @@ jobs:
           cache: pip
           cache-dependency-path: requirements.txt
 
-      # pytest is a test-time tool, not something the deployed app needs.
-      - run: pip install -r requirements.txt pytest==8.3.3
+      # pytest and the md-report plugin are test-time tools, not something the
+      # deployed app needs -- installed here, not in requirements.txt. Streamlit
+      # Cloud builds from requirements.txt, and a test-only dependency there would
+      # slow the deploy and risk the pinned-version guarantee NFR-2 depends on.
+      - run: pip install -r requirements.txt pytest==8.3.3 pytest-md-report==0.6.2
 
-      - run: python3 -m pytest -m realdata -v
+      - run: python3 -m pytest -m realdata -v --md-report --md-report-output=report.md
+
+      # Renders the table on the run's summary page instead of inside the log
+      # pane. if: always() so the summary still appears when tests fail -- that's
+      # when you most want to read it without expanding the log.
+      - run: cat report.md >> $GITHUB_STEP_SUMMARY
+        if: always()

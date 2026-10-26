@@ -9,5 +9,6 @@ __pycache__/
 .ruff_cache/
 .venv/
 venv/
+report.md
 
 .DS_Store
