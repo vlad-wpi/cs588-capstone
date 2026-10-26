@@ -21,4 +21,4 @@ jobs:
       # pytest is a test-time tool, not something the deployed app needs.
       - run: pip install -r requirements.txt pytest==8.3.3
 
-      - run: pytest
+      - run: pytest -m "not realdata"

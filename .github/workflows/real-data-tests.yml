@@ -1,0 +1,23 @@
+name: real-data-tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same Python version as tests.yml, for the same reason: match the deployment.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      # pytest is a test-time tool, not something the deployed app needs.
+      - run: pip install -r requirements.txt pytest==8.3.3
+
+      - run: python3 -m pytest -m realdata -v
